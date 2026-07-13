@@ -1,4 +1,4 @@
-# customer-churn-mlopsBilkul bhai. GitHub par upload karne se pehle project ko **clean** karna bahut zaroori hai. Recruiter jab repository dekhe to professional lage.
+# customer-churn-mlops
 
 # Step 1: Project Structure
 
