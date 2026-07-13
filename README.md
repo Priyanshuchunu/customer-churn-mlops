@@ -1,202 +1,152 @@
-# customer-churn-mlops
+# Customer Churn Prediction — End-to-End MLOps Pipeline
 
-# Step 1: Project Structure
+An end-to-end machine learning system that predicts telecom customer churn,
+tracks experiments with MLflow, and serves real-time predictions through a
+FastAPI REST API, containerized with Docker.
 
-Aisa structure rakho:
+## Problem
 
-```text
-customer-churn-mlops/
-│
-├── data/
-│   └── telco_churn.csv
-│
-├── models/
-│   ├── churn_model.joblib
-│   └── model_metadata.json
-│
-├── reports/
-│   ├── confusion_matrix.png
-│   └── model_comparison.png
-│
-├── src/
-│   ├── train.py
-│   └── app.py
-│
-├── dashboard.py
-├── requirements.txt
-├── README.md
-├── .gitignore
-├── LICENSE
-└── Dockerfile
+Telecom companies lose 15–25% of customers annually. Identifying at-risk
+customers *before* they churn lets retention teams intervene with targeted
+offers. This project builds a classifier that flags high-risk customers
+from account, billing, and service-usage attributes, and exposes it as a
+production-style API.
+
+## Architecture
+
+```
+Raw Data → Preprocessing (ColumnTransformer) → Model Training (3 candidates)
+    → MLflow Experiment Tracking → Best Model Selection → Model Registry
+    → FastAPI Serving Layer → Docker Container
 ```
 
----
+## Results
 
-# Step 2: `.gitignore`
+Three models were trained and compared via 5-fold cross-validated ROC-AUC:
 
-Create `.gitignore`
+| Model               | Accuracy | Precision | Recall | F1    | ROC-AUC |
+|----------------------|----------|-----------|--------|-------|---------|
+| **Logistic Regression** (best) | 0.697    | 0.620     | 0.717  | 0.665 | **0.778** |
+| Random Forest         | 0.689    | 0.620     | 0.663  | 0.641 | 0.765   |
+| XGBoost                | 0.689    | 0.614     | 0.695  | 0.652 | 0.745   |
 
-```gitignore
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+Logistic Regression was selected as the production model — it matched or
+beat the tree-based models on ROC-AUC while being faster to serve and
+easier to explain to non-technical stakeholders (a common real-world
+tradeoff, not just "pick the fanciest model").
 
-.venv/
-venv/
-env/
+**Recall was prioritized via `class_weight="balanced"`**: in churn
+prediction, missing an at-risk customer (false negative) is more costly
+than a false alarm, since the business cost of an unnecessary retention
+offer is much lower than losing the customer.
 
-.mlruns/
-
-.idea/
-.vscode/
-
-.ipynb_checkpoints/
-
-*.log
-
-.DS_Store
-```
-
----
-
-# Step 3: `requirements.txt`
-
-Generate fresh requirements:
-
-```bash
-pip freeze > requirements.txt
-```
-
-Uske baad unnecessary packages hata dena agar bahut zyada aa jayein.
-
----
-
-# Step 4: `README.md`
-
-Main recommend karta hoon is structure ka README:
-
-```md
-# Customer Churn Prediction using Machine Learning
-
-## Overview
-
-This project predicts whether a telecom customer is likely to churn using Machine Learning.
-
-## Features
-
-- Customer Churn Prediction
-- FastAPI REST API
-- Streamlit Dashboard
-- Interactive Charts
-- Model Comparison
-- Confusion Matrix
+See `reports/confusion_matrix.png` and `reports/model_comparison.png` for
+visualizations.
 
 ## Tech Stack
 
-- Python
-- Scikit-learn
-- Streamlit
-- FastAPI
-- Plotly
-- Pandas
+- **Modeling:** scikit-learn, XGBoost
+- **Experiment tracking:** MLflow (params, metrics, and model artifacts
+  logged per run)
+- **Serving:** FastAPI + Pydantic (typed request/response validation)
+- **Deployment:** Docker
+- **Data processing:** pandas, NumPy
 
-## Models
-
-- Logistic Regression
-- Random Forest
-- Decision Tree
-
-## Best Model
-
-Logistic Regression
-
-ROC-AUC: 0.778
-
-## Run
-
-Train Model
-
-python src/train.py
-
-Start API
-
-python src/app.py
-
-Start Dashboard
-
-streamlit run dashboard.py
-```
-
----
-
-
-
-# Step 5: GitHub Repository Description
+## Project Structure
 
 ```
-End-to-End Customer Churn Prediction System using Machine Learning, FastAPI, Streamlit, and Scikit-learn.
+churn-mlops/
+├── data/
+│   └── telco_churn.csv          # dataset (7,000 customers, 19 features)
+├── src/
+│   ├── generate_data.py         # synthetic data generator
+│   ├── train.py                 # training + MLflow tracking pipeline
+│   └── app.py                   # FastAPI serving layer
+├── models/
+│   ├── churn_model.joblib       # trained pipeline (preprocessing + model)
+│   └── model_metadata.json      # best model + full metric comparison
+├── reports/
+│   ├── confusion_matrix.png
+│   ├── model_comparison.png
+│   └── model_comparison.csv
+├── Dockerfile
+├── requirements.txt
+└── README.md
 ```
 
----
+## How to Run
 
-# Step 6: Topics
-
-GitHub Topics:
-
-```
-machine-learning
-
-streamlit
-
-fastapi
-
-python
-
-scikit-learn
-
-customer-churn
-
-ml
-
-dashboard
-
-classification
-
-telecom
+### 1. Train the model
+```bash
+pip install -r requirements.txt
+python src/generate_data.py   # generates dataset
+python src/train.py           # trains models, logs to MLflow, saves best model
 ```
 
----
-
-# Step 8: Repository Image
-<img width="1903" height="931" alt="Screenshot 2026-07-13 141407" src="https://github.com/user-attachments/assets/32e77ff0-23b7-4fe7-9461-8d263bd0422f" />
-
-<img width="1915" height="933" alt="Screenshot 2026-07-13 141440" src="https://github.com/user-attachments/assets/db1e771f-e61b-4b01-9002-f915976b148c" />
-
+View experiment tracking dashboard:
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
-<img width="1917" height="941" alt="Screenshot 2026-07-13 141453" src="https://github.com/user-attachments/assets/6bc511b7-2f18-4107-9f68-49de3692245c" />
 
+### 2. Serve predictions locally
+```bash
+uvicorn src.app:app --host 0.0.0.0 --port 8000
 ```
-<img width="1906" height="950" alt="Screenshot 2026-07-13 141519" src="https://github.com/user-attachments/assets/5f517f5a-7fd4-4d7a-ad38-87a84577e67d" />
 
----
-<img width="1917" height="931" alt="Screenshot 2026-07-13 141625" src="https://github.com/user-attachments/assets/27ef3922-e4f6-44e9-bfaf-8e11aa6e35ee" />
-
-# Step 9: Final Repository
-
+Test the API:
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "gender": "Female", "SeniorCitizen": 0, "Partner": "No", "Dependents": "No",
+    "tenure": 2, "PhoneService": "Yes", "MultipleLines": "No",
+    "InternetService": "Fiber optic", "OnlineSecurity": "No", "TechSupport": "No",
+    "StreamingTV": "Yes", "Contract": "Month-to-month", "PaperlessBilling": "Yes",
+    "PaymentMethod": "Electronic check", "MonthlyCharges": 95.5,
+    "TotalCharges": 191.0, "NumSupportCalls": 4
+  }'
 ```
-⭐ Customer Churn Prediction
+Response:
+```json
+{"churn_probability": 0.9647, "churn_prediction": "Yes", "risk_level": "High"}
+```
 
-📊 Dashboard
+Interactive API docs available at `http://localhost:8000/docs` (auto-generated by FastAPI).
 
-🤖 Machine Learning
+### 3. Run with Docker
+```bash
+docker build -t churn-prediction-api .
+docker run -p 8000:8000 churn-prediction-api
+```
 
-⚡ FastAPI
+## Key Engineering Decisions
 
-📈 Analytics
+- **Pipeline over ad-hoc preprocessing:** `ColumnTransformer` +
+  `sklearn.Pipeline` bundles preprocessing and model together, so the
+  exact same transformation is applied at training and inference time —
+  eliminating train/serve skew.
+- **Class imbalance handling:** used `class_weight="balanced"` (LR, RF)
+  and `scale_pos_weight` (XGBoost) rather than naive resampling, to keep
+  the full dataset while correcting for the ~42/58 class split.
+- **Cross-validation, not just a single train/test split:** 5-fold CV
+  ROC-AUC reported alongside held-out test metrics to check for
+  overfitting/variance before selecting the production model.
+- **Typed API contracts:** Pydantic models enforce input schema at the
+  API boundary, rejecting malformed requests before they reach the model.
 
-📱 Streamlit
+## Dataset Note
 
-🐳 Docker
+This project uses a synthetically generated dataset (`src/generate_data.py`)
+structured after the well-known IBM Telco Customer Churn dataset, with
+engineered feature-target relationships (e.g., month-to-month contracts,
+high support-call volume, and short tenure increase churn probability)
+so the pipeline demonstrates genuine, explainable signal rather than
+random noise. To use real data, drop in any churn dataset with matching
+column names and re-run `train.py`.
 
+## Future Improvements
 
+- Hyperparameter tuning via `GridSearchCV` / `Optuna`
+- SHAP values for per-prediction explainability
+- Model monitoring for data/concept drift in production
+- CI/CD pipeline (GitHub Actions) to retrain and redeploy on new data
